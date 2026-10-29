@@ -1,0 +1,37 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+# Web framework
+flask = ">=3.0,<4.0"
+# Lets the React app (a different address) call the API
+flask-cors = ">=5.0,<7.0"
+# Loads settings from .env and .flaskenv
+python-dotenv = ">=1.0,<2.0"
+# Database: SQLAlchemy models, Alembic migrations, PostgreSQL driver
+flask-sqlalchemy = ">=3.1,<4.0"
+flask-migrate = ">=4.0,<5.0"
+psycopg = {extras = ["binary"], version = ">=3.2,<4.0"}
+# Security and validation: password hashing, login tokens, request checking
+bcrypt = ">=4.2,<6.0"
+flask-jwt-extended = ">=4.6,<5.0"
+pydantic = ">=2.8,<3.0"
+email-validator = ">=2.2,<3.0"
+# Email (confirmation and password reset) and limits on repeated attempts
+resend = ">=2.0,<3.0"
+flask-limiter = ">=3.8,<5.0"
+# Production web server (Linux)
+gunicorn = ">=22.0,<24.0"
+# Shared rate-limit counters in production (RATELIMIT_STORAGE_URI=redis://...)
+redis = ">=5.0,<7.0"
+requests = "<3.0,>=2.32"
+cryptography = ">=43.0"
+
+[dev-packages]
+# Automated tests: pipenv run pytest
+pytest = ">=8.0,<10.0"
+
+[requires]
+python_version = "3"
