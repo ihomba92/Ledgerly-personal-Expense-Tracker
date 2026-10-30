@@ -24,7 +24,7 @@ from app.models import Category, LoginCode, OAuthIdentity, User
 from app.models.enums import OAuthProvider
 from app.models.one_time_token import hash_token
 from app.schemas.auth import OAuthExchangeIn
-from app.services import oauth
+from app.services import notifications, oauth
 from app.validation import parse_body
 
 log = logging.getLogger("ledgerly.auth")
@@ -72,11 +72,16 @@ def _find_or_create_user(provider: str, profile: dict) -> tuple[User, bool]:
         db.session.add(user)
         db.session.flush()
         db.session.add_all(Category.defaults_for(user.id))
+        notifications.welcome(user)
         log.info("%s sign-up created account %s", provider, user.id)
     else:
         if user.email_verified_at is None:
             user.email_verified_at = now_utc()  # the provider has confirmed the email for us
         log.info("%s account linked to existing account %s (same verified email)", provider, user.id)
+        label = oauth.PROVIDERS[provider]["label"]
+        notifications.security(user.id, f"{label} sign-in added",
+                               f"You can now sign in to Ledgerly with your {label} account ({profile['email']}). "
+                               "If this wasn’t you, change your password and contact support.")
     db.session.add(OAuthIdentity(user_id=user.id, provider=OAuthProvider(provider),
                                  subject=profile["subject"], email=profile["email"]))
     return user, is_new

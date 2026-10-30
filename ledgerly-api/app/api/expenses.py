@@ -27,6 +27,8 @@ from app.money import label, money, to_cents
 from app.schemas.ledger import ExpenseIds, ExpenseIn, ExpenseQuery, ExpenseUpdate
 from app.services import storage
 from app.services.ledger import balance_json, lock_user, require_funds
+from app.services.notifications import check_after_spending
+from app.api.dates import today_for
 from app.validation import parse_body
 
 log = logging.getLogger("ledgerly.ledger")
@@ -34,6 +36,13 @@ log = logging.getLogger("ledgerly.ledger")
 
 def _now():
     return datetime.now(timezone.utc)
+
+
+def _after_spending(uid, expenses):
+    """Budget and low-balance alerts for the bell, once the spending is saved."""
+    user = db.session.get(User, uid)
+    check_after_spending(user, expenses, today_for(user))
+    db.session.commit()
 
 
 def _require_own_category(uid, category_id):
@@ -98,6 +107,7 @@ def create_expense():
     db.session.add(expense)
     db.session.commit()
     log.info("Expense %s created (%s, %s cents)", expense.id, expense.status.value, cents)
+    _after_spending(uid, [expense])
     return jsonify(expense=expense_json(expense), balance=balance_json(uid)), 201
 
 
@@ -132,6 +142,7 @@ def update_expense(expense_id):
         expense.status = new_status
     db.session.commit()
     log.info("Expense %s updated (%s, %s cents)", expense.id, expense.status.value, expense.amount_cents)
+    _after_spending(expense.user_id, [expense])
     return jsonify(expense=expense_json(expense), balance=balance_json(expense.user_id))
 
 
@@ -159,6 +170,7 @@ def _pay(expenses, uid):
         e.status, e.paid_at = ExpenseStatus.paid, _now()
     db.session.commit()
     log.info("Paid %d draft(s) from the balance: %s", len(drafts), ", ".join(str(e.id) for e in drafts))
+    _after_spending(uid, drafts)
     return drafts
 
 

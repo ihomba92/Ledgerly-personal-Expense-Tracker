@@ -25,6 +25,37 @@ export function AppDataProvider({ children }) {
   const [loadError, setLoadError] = useState("");
   const [drawer, setDrawer] = useState({ open: false, expenseId: null });
   const [topUpDialog, setTopUpDialog] = useState({ open: false });
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // ---- Notifications (the bell) ----
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const data = await api("/notifications");
+      setNotifications(data.notifications);
+      setUnreadCount(data.unread_count);
+    } catch {
+      /* the bell just keeps what it had; the next refresh will try again */
+    }
+  }, []);
+
+  const markNotificationRead = useCallback(async (id) => {
+    setNotifications((list) => list.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    const data = await api(`/notifications/${id}/read`, { method: "POST" });
+    setUnreadCount(data.unread_count);
+  }, []);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    setNotifications((list) => list.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+    await api("/notifications/read-all", { method: "POST" });
+  }, []);
+
+  const deleteNotification = useCallback(async (id) => {
+    setNotifications((list) => list.filter((n) => n.id !== id));
+    const data = await api(`/notifications/${id}`, { method: "DELETE" });
+    setUnreadCount(data.unread_count);
+  }, []);
 
   // ---- Loading ----
   const refresh = useCallback(async () => {
@@ -48,13 +79,28 @@ export function AppDataProvider({ children }) {
   useEffect(() => {
     if (authStatus === "authenticated") {
       refresh();
+      refreshNotifications();
     } else {
       setExpenses([]);
       setTopUps([]);
       setCategories([]);
+      setNotifications([]);
+      setUnreadCount(0);
       setLoadState("idle");
     }
-  }, [authStatus, user?.id, refresh]);
+  }, [authStatus, user?.id, refresh, refreshNotifications]);
+
+  // Keep the bell current: every minute, and whenever the tab comes back into view.
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+    const timer = setInterval(refreshNotifications, 60_000);
+    const onVisible = () => document.visibilityState === "visible" && refreshNotifications();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [authStatus, refreshNotifications]);
 
   // ---- Balance ----
   const totals = useMemo(() => {
@@ -86,14 +132,16 @@ export function AppDataProvider({ children }) {
       : await api("/expenses", { method: "POST", body: expenseToApi(fields) });
     const saved = expenseFromApi(res.expense);
     putExpense(saved);
+    refreshNotifications(); // paid spending can trigger budget or low-balance alerts
     return saved;
-  }, []);
+  }, [refreshNotifications]);
 
   /** Pay drafts from the balance (all or nothing). */
   const payExpenses = useCallback(async (ids) => {
     await api("/expenses/pay", { method: "POST", body: { ids } });
     setExpenses((list) => list.map((e) => (ids.includes(e.id) ? { ...e, status: "paid" } : e)));
-  }, []);
+    refreshNotifications();
+  }, [refreshNotifications]);
 
   const deleteExpenses = useCallback(async (ids) => {
     const res = ids.length === 1
@@ -180,6 +228,7 @@ export function AppDataProvider({ children }) {
   const value = useMemo(
     () => ({
       loadState, loadError, refresh,
+      notifications, unreadCount, refreshNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification,
       expenses, saveExpense, payExpenses, deleteExpenses, restoreExpenses,
       uploadReceipt, removeReceipt, openReceipt,
       topUps, addTopUp, deleteTopUp, restoreTopUp,
@@ -188,7 +237,8 @@ export function AppDataProvider({ children }) {
       drawer, openExpenseDrawer, closeExpenseDrawer,
       topUpDialog, openTopUp, closeTopUp,
     }),
-    [loadState, loadError, refresh, expenses, saveExpense, payExpenses, deleteExpenses, restoreExpenses, uploadReceipt,
+    [loadState, loadError, refresh, notifications, unreadCount, refreshNotifications, markNotificationRead,
+      markAllNotificationsRead, deleteNotification, expenses, saveExpense, payExpenses, deleteExpenses, restoreExpenses, uploadReceipt,
       removeReceipt, openReceipt, topUps, addTopUp, deleteTopUp, restoreTopUp, categories, categoryById, saveCategory,
       deleteCategory, totals, availableFor, drawer, openExpenseDrawer, closeExpenseDrawer, topUpDialog, openTopUp, closeTopUp]
   );

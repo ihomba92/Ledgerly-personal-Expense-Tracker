@@ -2,6 +2,7 @@
 from app.models.category import Category  # noqa: F401
 from app.models.email_verification import EmailVerificationToken  # noqa: F401
 from app.models.expense import Expense  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
 from app.models.oauth import LoginCode, OAuthIdentity  # noqa: F401
 from app.models.password_reset import PasswordResetToken  # noqa: F401
 from app.models.receipt import Receipt  # noqa: F401

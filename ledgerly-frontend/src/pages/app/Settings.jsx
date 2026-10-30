@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +17,8 @@ import { PasswordInput } from "@/components/shared/PasswordInput";
 import { FormAlert } from "@/components/shared/FormAlert";
 import { applyFieldErrors } from "@/lib/forms";
 import { useAuth } from "@/store/Auth";
+import { useAppData } from "@/store/AppData";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 const profileSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name.").max(80, "Use 80 characters or fewer."),
@@ -34,9 +36,9 @@ const API_NAMES = { fullName: "full_name", ledgerName: "ledger_name", currency: 
 const FORM_NAMES = Object.fromEntries(Object.entries(API_NAMES).map(([f, a]) => [a, f]));
 
 const NOTIFICATIONS = [
-  { name: "notifyLowBalance", label: "Low balance alerts", hint: "An email when your balance drops below 10% of what you’ve added." },
-  { name: "notifyBudget", label: "Budget warnings", hint: "An email when a category reaches 85% of its monthly budget." },
-  { name: "weeklyDigest", label: "Weekly spending summary", hint: "A Monday email with last week’s spending by category." },
+  { name: "notifyLowBalance", label: "Low balance alerts", hint: "A notification when your balance drops below 10% of what you’ve added." },
+  { name: "notifyBudget", label: "Budget warnings", hint: "A notification when a category reaches 85% of its monthly budget, and when it goes over." },
+  { name: "weeklyDigest", label: "Weekly spending summary", hint: "A Monday summary of last week’s spending (coming soon)." },
 ];
 
 const fromUser = (u) => ({
@@ -71,13 +73,7 @@ export default function Settings() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-6 max-w-4xl">
           <Section title="Profile" description="Your name, and the name shown on your ledger.">
-            <div className="flex items-center gap-4 mb-2">
-              <div className="w-14 h-14 rounded-full bg-primary text-on-primary flex items-center justify-center font-metric-md text-metric-md">{user.initials}</div>
-              <div className="flex flex-col">
-                <span className="font-title-card text-title-card text-text-primary">{user.name}</span>
-                <span className="font-body-sm text-body-sm text-text-tertiary">Member since {new Date(user.created_at).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</span>
-              </div>
-            </div>
+            <PhotoPicker />
             <div className="grid sm:grid-cols-2 gap-4">
               <TextField form={form} name="fullName" label="Full name" />
               <TextField form={form} name="ledgerName" label="Ledger name" />
@@ -102,7 +98,7 @@ export default function Settings() {
             <p className="font-body-sm text-body-sm text-text-tertiary">Changing the currency changes the symbol shown. It doesn’t convert amounts you’ve already recorded.</p>
           </Section>
 
-          <Section title="Notifications" description="Choose which emails you receive.">
+          <Section title="Notifications" description="Choose which alerts appear under the bell. Security notices are always shown.">
             <div className="flex flex-col gap-1">
               {NOTIFICATIONS.map((n) => (
                 <FormField key={n.name} control={form.control} name={n.name} render={({ field }) => (
@@ -134,6 +130,80 @@ export default function Settings() {
         <PasswordSection />
         <DangerSection />
       </div>
+    </div>
+  );
+}
+
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const PHOTO_MAX = 5 * 1024 * 1024;
+
+/** Profile picture: upload, change or remove. The server crops it square, resizes it and strips hidden data. */
+function PhotoPicker() {
+  const { user, uploadAvatar, removeAvatar } = useAuth();
+  const toast = useToast();
+  const input = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const pick = async (file) => {
+    if (input.current) input.current.value = "";
+    if (!file) return;
+    setError("");
+    if (!PHOTO_TYPES.includes(file.type)) return setError("Choose a JPG, PNG or WebP image.");
+    if (file.size > PHOTO_MAX) return setError("That image is over 5 MB. Choose a smaller one.");
+    setBusy(true);
+    try {
+      await uploadAvatar(file);
+      toast("Profile photo updated");
+    } catch (err) {
+      setError(err.fields?.file ?? err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await removeAvatar();
+      toast("Profile photo removed", { tone: "info" });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 mb-2">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative">
+          <UserAvatar size="lg" />
+          {busy && (
+            <span className="absolute inset-0 rounded-full bg-text-primary/40 flex items-center justify-center">
+              <Icon name="progress_activity" className="text-[22px] text-surface-card animate-spin" />
+            </span>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
+            <span className="font-title-card text-title-card text-text-primary">{user.name}</span>
+            <span className="font-body-sm text-body-sm text-text-tertiary">Member since {new Date(user.created_at).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input ref={input} type="file" accept={PHOTO_TYPES.join(",")} className="sr-only" onChange={(e) => pick(e.target.files?.[0])} aria-label="Choose a profile photo" />
+            <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => input.current?.click()}>
+              <Icon name="photo_camera" /> {user.has_avatar ? "Change photo" : "Upload photo"}
+            </Button>
+            {user.has_avatar && (
+              <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={remove}>Remove</Button>
+            )}
+          </div>
+        </div>
+      </div>
+      <p className="font-body-sm text-body-sm text-text-tertiary">JPG, PNG or WebP up to 5 MB. It’s cropped to a square, and location data is removed.</p>
+      <FormAlert>{error}</FormAlert>
     </div>
   );
 }
@@ -198,6 +268,7 @@ const passwordSchema = z
 
 function PasswordSection() {
   const { user, changePassword } = useAuth();
+  const { refreshNotifications } = useAppData();
   const toast = useToast();
   const hasPassword = user.has_password;
   const form = useForm({ resolver: zodResolver(passwordSchema), defaultValues: { current: "", next: "", confirm: "" } });
@@ -210,6 +281,7 @@ function PasswordSection() {
     try {
       const data = await changePassword(hasPassword ? current : null, next);
       form.reset();
+      refreshNotifications(); // shows the "Password changed" security notice under the bell
       toast(hasPassword ? "Password changed. Other devices have been logged out." : data.message);
     } catch (err) {
       if (!applyFieldErrors(form, err, { current_password: "current", new_password: "next" })) form.setError("current", { type: "server", message: err.message });

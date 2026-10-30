@@ -28,6 +28,7 @@ from app.schemas.auth import (ForgotPasswordIn, LoginIn, RegisterIn, ResendVerif
 from app.security import hash_password, verify_password
 from app.services.email import password_reset_email, send_email, verification_email
 from app.validation import parse_body
+from app.services import notifications
 
 
 log = logging.getLogger("ledgerly.auth")
@@ -114,6 +115,7 @@ def register():
         return _error(409, "Conflict", message, {"email": message})
     db.session.refresh(user)
     db.session.add_all(Category.defaults_for(user.id))  # every ledger starts with the usual categories
+    notifications.welcome(user)
     db.session.commit()
     sent = _send_verification(user)
     log.info("Account %s created (%s); confirmation email %s", user.id, mask_email(user.email),
@@ -224,6 +226,9 @@ def reset_password():
     if user.email_verified_at is None:
         user.email_verified_at = changed  # the reset link proves they own the email
     row.used_at = changed
+    notifications.security(user.id, "Your password was reset",
+                           "Your Ledgerly password was changed using a reset link, and other devices were logged out. "
+                           "If this wasn’t you, reset it again straight away.")
     db.session.commit()
     log.info("Password reset completed for account %s; other sessions ended", user.id)
     return jsonify(message="Your password has been changed. Log in with your new password."), 200

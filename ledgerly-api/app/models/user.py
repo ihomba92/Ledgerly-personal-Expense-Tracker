@@ -31,12 +31,23 @@ class User(db.Model):
     weekly_digest: Mapped[bool] = mapped_column(server_default=text("false"))
     # When the user clicked the link in the verification email (empty until then).
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Profile picture: where the cleaned 256x256 WebP is stored, and when it last changed (for refreshing).
+    avatar_key: Mapped[str | None] = mapped_column(String(500))
+    avatar_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Tokens issued before this moment stop working (e.g. after a password reset).
     password_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     identities = relationship("OAuthIdentity", lazy="selectin", cascade="all, delete-orphan", passive_deletes=True)
+
+    @property
+    def has_avatar(self) -> bool:
+        return self.avatar_key is not None
+
+    @property
+    def avatar_version(self) -> int | None:
+        return int(self.avatar_updated_at.timestamp()) if self.avatar_updated_at else None
 
     @property
     def has_password(self) -> bool:

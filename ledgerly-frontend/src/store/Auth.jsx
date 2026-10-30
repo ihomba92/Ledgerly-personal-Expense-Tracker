@@ -15,6 +15,7 @@ const withExtras = (user) => (user ? { ...user, name: user.full_name, initials: 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState(session.token ? "loading" : "guest");
+  const [avatarUrl, setAvatarUrl] = useState(null); // the profile picture as a local blob: URL
 
   const applyUser = useCallback((u) => {
     setUser(withExtras(u));
@@ -24,6 +25,7 @@ export function AuthProvider({ children }) {
   const signOut = useCallback(() => {
     session.clear();
     setUser(null);
+    setAvatarUrl(null);
     setActiveCurrency(null);
     setStatus("guest");
   }, []);
@@ -41,6 +43,45 @@ export function AuthProvider({ children }) {
       })
       .catch(() => signOut());
   }, [applyUser, signOut]);
+
+  // The picture needs the login token, so it's fetched once and shown from a local blob: URL.
+  // avatar_version changes whenever a new picture is uploaded, which fetches it again.
+  const avatarVersion = user?.has_avatar ? user.avatar_version : null;
+  useEffect(() => {
+    if (!avatarVersion) {
+      setAvatarUrl(null);
+      return;
+    }
+    let url = null;
+    let cancelled = false;
+    api("/auth/me/avatar", { raw: true })
+      .then((res) => res.blob())
+      .then((blob) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setAvatarUrl(url);
+      })
+      .catch(() => setAvatarUrl(null));
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [avatarVersion]);
+
+  const uploadAvatar = useCallback(
+    async (file) => {
+      const form = new FormData();
+      form.append("file", file);
+      const data = await api("/auth/me/avatar", { method: "POST", form });
+      applyUser(data.user);
+    },
+    [applyUser]
+  );
+
+  const removeAvatar = useCallback(async () => {
+    const data = await api("/auth/me/avatar", { method: "DELETE" });
+    applyUser(data.user);
+  }, [applyUser]);
 
   /** Store a token from login, email confirmation or a password change. */
   const applySession = useCallback(
@@ -99,8 +140,10 @@ export function AuthProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ user, status, login, register, applySession, signOut, updateProfile, changePassword, deleteAccount }),
-    [user, status, login, register, applySession, signOut, updateProfile, changePassword, deleteAccount]
+    () => ({ user, status, avatarUrl, login, register, applySession, signOut, updateProfile, changePassword, deleteAccount,
+      uploadAvatar, removeAvatar }),
+    [user, status, avatarUrl, login, register, applySession, signOut, updateProfile, changePassword, deleteAccount,
+      uploadAvatar, removeAvatar]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -33,9 +33,11 @@ def app():
 
 @pytest.fixture(autouse=True)
 def clean(app):
+    """Every test starts with empty tables and an empty upload folder."""
     with app.app_context():
         db.session.execute(text("TRUNCATE users, support_requests RESTART IDENTITY CASCADE"))
         db.session.commit()
+    shutil.rmtree(app.config["UPLOAD_FOLDER"], ignore_errors=True)
     limiter.reset()
     yield
 

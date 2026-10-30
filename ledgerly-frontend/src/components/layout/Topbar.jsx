@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/Icon";
 import { useAuth } from "@/store/Auth";
+import { UserAvatar } from "@/components/shared/UserAvatar";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { formatMoney } from "@/lib/utils";
 import { useAppData } from "@/store/AppData";
 
@@ -81,10 +83,7 @@ export function Topbar({ onMenu }) {
           <span className="hidden sm:inline">New Expense</span>
         </Button>
         <div className="h-4 w-px bg-surface-container-high hidden sm:block" />
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
-          <Icon name="notifications" className="text-[20px]" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-negative-vibrant" />
-        </Button>
+        <NotificationBell />
 
         <div className="relative" ref={menuRef}>
           <button
@@ -93,9 +92,9 @@ export function Topbar({ onMenu }) {
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label="Account menu"
-            className="w-8 h-8 rounded-full bg-primary flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
           >
-            <Icon name="person" className="text-on-primary text-[18px]" />
+            <UserAvatar size="sm" />
           </button>
           {menuOpen && (
             <div role="menu" className="absolute right-0 mt-2 w-60 rounded-xl bg-surface-card border border-border-hairline shadow-[0_12px_32px_rgba(31,36,33,0.12)] p-1.5 animate-fade-in">

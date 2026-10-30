@@ -154,7 +154,27 @@ A button appears in the app only when its client id and secret are set. Without 
 - Every API response sends `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Frame-Options: DENY`
   and `X-Content-Type-Options: nosniff`.
 
-## 6. Logging
+## 6. Notifications (the bell) and profile pictures
+
+**Notifications** are created by the API and shown under the bell in the app:
+
+| Kind | When | Setting |
+|---|---|---|
+| `welcome` | A new account is created | always |
+| `budget_near` | A category reaches 85% of its monthly budget | `notify_budget` |
+| `budget_over` | A category goes over its budget | `notify_budget` |
+| `low_balance` | The balance drops below 10% of everything added | `notify_low_balance` |
+| `security` | Password changed, set or reset; Google/Microsoft sign-in added | always |
+
+Each alert has a `dedupe_key` (e.g. one "over budget" per category per month), so the same alert never repeats.
+They're checked whenever paid spending is saved. Push notifications to phones (Firebase) can send these same rows.
+
+**Profile pictures** are re-drawn by Pillow, never stored as uploaded: only real JPEG/PNG/WebP images are accepted,
+"decompression bomb" images are refused, photos are turned upright, cropped square, resized to 256 × 256 and saved
+as a fresh WebP, so hidden data such as GPS location is not kept. They're stored next to receipts (`UPLOAD_FOLDER`)
+and deleted with the account.
+
+## 7. Logging
 
 Every request gets an id. It's sent back in the `X-Request-ID` header and included in every error body as
 `request_id`, so a problem someone reports can be found in the log straight away:
@@ -171,6 +191,7 @@ Every request gets an id. It's sent back in the `X-Request-ID` header and includ
 | `ledgerly.auth` | Sign-ups, confirmations, logins (failed ones with the reason), resets, Google/Microsoft sign-ins |
 | `ledgerly.ledger` | Expenses, payments, refused payments, top-ups, receipts |
 | `ledgerly.email` | Emails sent or not sent through Resend |
+| `ledgerly.notifications` | Alerts created for the bell |
 | `ledgerly.errors` | Rate limits and unexpected errors (with the full traceback) |
 
 - Logs go to the console and to `logs/ledgerly.log` (rotated at 5 MB, 5 files kept).
@@ -182,7 +203,7 @@ Every request gets an id. It's sent back in the `X-Request-ID` header and includ
 
 Find everything about one request: `grep 1f29902107f9 logs/ledgerly.log`
 
-## 7. Endpoints
+## 8. Endpoints
 
 All paths start with `/api`. 🔒 = needs the login token.
 
@@ -198,6 +219,8 @@ All paths start with `/api`. 🔒 = needs the login token.
 | PATCH | `/auth/me` 🔒 | Any of `full_name`, `ledger_name`, `currency`, `timezone`, `notify_low_balance`, `notify_budget`, `weekly_digest` |
 | POST | `/auth/change-password` 🔒 | `current_password` (not needed if the account has no password yet), `new_password` → new token |
 | DELETE | `/auth/me` 🔒 | `password`, or `confirm_email` for accounts without a password → deletes everything |
+| POST | `/auth/me/avatar` 🔒 | Multipart field `file` (JPG, PNG, WebP ≤ 5 MB) → cropped square, 256 × 256 WebP, location data removed |
+| GET / DELETE | `/auth/me/avatar` 🔒 | The profile picture / remove it |
 | POST | `/auth/forgot-password` | `email` → emails a 30-minute reset link · limit 3 per 15 min |
 | POST | `/auth/reset-password` | `token`, `password` → all devices logged out |
 | GET | `/auth/oauth/providers` | Which sign-in buttons to show |
@@ -227,9 +250,12 @@ All paths start with `/api`. 🔒 = needs the login token.
 | POST | `/expenses/<id>/receipt` | Multipart form field `file` (PDF, PNG, JPG, ≤ 15 MB). Replaces any existing receipt |
 | GET / DELETE | `/expenses/<id>/receipt` | Download / remove |
 | POST | `/support-requests` | `topic`, `subject`, `message` · limit 5 per hour |
+| GET | `/notifications` | Newest 50 with `unread_count` |
+| POST | `/notifications/<id>/read` · `/notifications/read-all` | Mark one / all as read |
+| DELETE | `/notifications/<id>` | Remove one |
 | GET | `/health` | API and database status (no login needed) |
 
-## 8. Project layout
+## 9. Project layout
 
 ```
 app/
@@ -240,7 +266,8 @@ app/
   models/            tables: users, categories, top_ups, expenses, receipts, support_requests, email tokens
   schemas/           request rules (Pydantic)
   api/               endpoints, one file per area
-  services/          ledger (balance rule), email (Resend), storage (receipt files), oauth (Google/Microsoft)
+  services/          ledger (balance rule), email (Resend), storage (files), oauth (Google/Microsoft),
+                     notifications (the bell), avatars (profile picture cleaning)
   security.py        bcrypt hashing
   logging_setup.py   request ids, per-request lines, secret removal, log file
   validation.py      turns validation errors into clear per-field messages
@@ -251,7 +278,7 @@ tests/               pytest suite
 wsgi.py              entry point for flask and gunicorn
 ```
 
-## 9. Production notes
+## 10. Production notes
 
 - Set `APP_ENV=production`. The app refuses to start without real `SECRET_KEY` / `JWT_SECRET_KEY`,
   `DATABASE_URL`, `RESEND_API_KEY` and a Redis `RATELIMIT_STORAGE_URI`.

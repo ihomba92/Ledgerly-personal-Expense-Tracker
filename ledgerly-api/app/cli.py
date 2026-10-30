@@ -8,7 +8,9 @@ import click
 from sqlalchemy import delete, select
 
 from app.extensions import db
-from app.models import Category, Expense, TopUp, User
+from app.models import Category, Expense, Notification, TopUp, User
+from app.models.category import DEFAULT_CATEGORIES
+from app.services import notifications
 from app.models.enums import ExpenseStatus, FundingSource, PaymentMethod, TopUpKind
 from app.security import hash_password
 
@@ -66,6 +68,11 @@ def register_commands(app):
         else:  # start the demo data over
             db.session.execute(delete(Expense).where(Expense.user_id == user.id))
             db.session.execute(delete(TopUp).where(TopUp.user_id == user.id))
+            db.session.execute(delete(Notification).where(Notification.user_id == user.id))
+            budgets = {label: budget for label, _, budget in DEFAULT_CATEGORIES}
+            for category in db.session.scalars(select(Category).where(Category.user_id == user.id)):
+                if category.label in budgets:
+                    category.budget_cents = budgets[category.label]
         db.session.flush()
 
         cats = {c.label: c.id for c in db.session.scalars(select(Category).where(Category.user_id == user.id))}
@@ -79,5 +86,6 @@ def register_commands(app):
                                    merchant=merchant, amount_cents=amount * 100, method=PaymentMethod(method),
                                    status=ExpenseStatus(status), spent_on=today - timedelta(days=days),
                                    paid_at=now if paid else None))
+        notifications.welcome(user)
         db.session.commit()
         click.echo(f"Demo account ready: {DEMO_EMAIL} / {DEMO_PASSWORD}")

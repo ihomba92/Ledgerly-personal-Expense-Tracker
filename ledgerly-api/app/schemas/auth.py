@@ -78,6 +78,8 @@ class UserOut(BaseModel):
     email_verified: bool
     has_password: bool
     providers: list[str]
+    has_avatar: bool
+    avatar_version: int | None
     ledger_name: str
     currency: str
     timezone: str

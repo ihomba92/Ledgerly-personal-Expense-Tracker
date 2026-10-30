@@ -3,6 +3,7 @@ import { cn, formatWhole } from "@/lib/utils";
 import { Icon } from "@/components/shared/Icon";
 import { Logo } from "@/components/shared/Logo";
 import { useAuth } from "@/store/Auth";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { useAppData } from "@/store/AppData";
 
 export const NAV_ITEMS = [
@@ -59,7 +60,7 @@ export function Sidebar({ open, onClose }) {
         <div className="flex flex-col gap-6">
           <NavLink to="/app/settings" onClick={onClose}
             className="flex items-center gap-3 px-2 py-1.5 bg-surface-container rounded-lg hover:bg-surface-container-high transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
-            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary font-title-card text-title-card shrink-0">{user?.initials}</div>
+            <UserAvatar size="md" />
             <div className="flex flex-col min-w-0 flex-1">
               <span className="font-title-card text-title-card text-on-surface truncate">{user?.name}</span>
               <span className="font-label-uppercase text-label-uppercase text-text-tertiary uppercase truncate">{user?.role}</span>

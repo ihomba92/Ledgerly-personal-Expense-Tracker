@@ -104,9 +104,7 @@ export default function Landing() {
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         {/* Page icon + title, the way a notebook page opens */}
-        <div className="relative -mt-11 sm:-mt-14 w-[84px] h-[84px] sm:w-[104px] sm:h-[104px]">
-          <LedgerBookIcon />
-        </div>
+       
 
         {/* Title, description and details on the left; the moving preview on the right */}
         <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] xl:grid-cols-[minmax(0,1fr)_minmax(0,480px)] gap-10 xl:gap-14 items-start">

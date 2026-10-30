@@ -37,3 +37,11 @@ class RequestStatus(str, enum.Enum):
 class OAuthProvider(str, enum.Enum):
     google = "google"
     microsoft = "microsoft"
+
+
+class NotificationKind(str, enum.Enum):
+    welcome = "welcome"
+    budget_near = "budget_near"      # a category reached 85% of its budget
+    budget_over = "budget_over"      # a category went over its budget
+    low_balance = "low_balance"      # balance below 10% of everything added
+    security = "security"            # password changed, new sign-in method
