@@ -15,7 +15,10 @@ class Config:
     JWT_REMEMBER_DAYS = 30             # "Keep me signed in for 30 days"
 
     # Email via Resend. Without an API key, emails are printed in the terminal instead.
+    # Which service sends email: "resend" (default) or "brevo". Both use HTTPS, which Render's free plan allows.
+    EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "resend").strip().lower()
     RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
     EMAIL_FROM = os.getenv("EMAIL_FROM", "Ledgerly <onboarding@resend.dev>")
     PASSWORD_RESET_MINUTES = 30
     EMAIL_VERIFICATION_MINUTES = 24 * 60
@@ -78,8 +81,12 @@ class ProductionConfig(Config):
             raise RuntimeError("Set a real SECRET_KEY before running in production.")
         if cls.JWT_SECRET_KEY in ("", "change-me", "dev-only-not-secret-jwt") or len(cls.JWT_SECRET_KEY) < 32:
             raise RuntimeError("Set a real JWT_SECRET_KEY (at least 32 characters) before running in production.")
-        if not cls.RESEND_API_KEY:
-            raise RuntimeError("Set RESEND_API_KEY before running in production.")
+        if cls.EMAIL_PROVIDER not in ("resend", "brevo"):
+            raise RuntimeError("EMAIL_PROVIDER must be 'resend' or 'brevo'.")
+        if cls.EMAIL_PROVIDER == "resend" and not cls.RESEND_API_KEY:
+            raise RuntimeError("Set RESEND_API_KEY before running in production (or set EMAIL_PROVIDER=brevo).")
+        if cls.EMAIL_PROVIDER == "brevo" and not cls.BREVO_API_KEY:
+            raise RuntimeError("Set BREVO_API_KEY before running in production (EMAIL_PROVIDER is brevo).")
         if cls.RATELIMIT_STORAGE_URI == "memory://":
             raise RuntimeError("Use Redis for RATELIMIT_STORAGE_URI in production (memory resets on restart).")
         if not cls.SQLALCHEMY_DATABASE_URI:
@@ -90,6 +97,7 @@ class TestingConfig(Config):
     TESTING = True
     LOG_FILE = ""  # tests log to the console only
     RESEND_API_KEY = ""  # tests never send real email
+    BREVO_API_KEY = ""
     RATELIMIT_ENABLED = True
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "instance", "test-uploads")
     # Tests use their own database so they never touch your real data.

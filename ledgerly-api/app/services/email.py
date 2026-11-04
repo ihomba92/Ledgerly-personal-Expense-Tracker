@@ -1,21 +1,26 @@
-"""Sending email through Resend.
+"""Sending email through Resend or Brevo (EMAIL_PROVIDER), over HTTPS.
 
-Without RESEND_API_KEY (normal in development) the email is printed in the
-terminal instead, so you can copy the link while testing.
+Without an API key for the chosen service (normal in development) the email is printed
+in the terminal instead, so you can copy the link while testing.
 """
 import logging
 import sys
+from email.utils import parseaddr
 
+import requests
 import resend
 from flask import current_app
 
 log = logging.getLogger("ledgerly.email")
 
+BREVO_URL = "https://api.brevo.com/v3/smtp/email"
+
 
 def send_email(to: str, subject: str, html: str, text: str) -> bool:
-    api_key = current_app.config["RESEND_API_KEY"]
+    provider = current_app.config.get("EMAIL_PROVIDER", "resend")
+    api_key = current_app.config["BREVO_API_KEY" if provider == "brevo" else "RESEND_API_KEY"]
     if not api_key:
-        log.warning("Email not sent (no RESEND_API_KEY): '%s'", subject)
+        log.warning("Email not sent (no %s API key): '%s'", provider, subject)
         if not current_app.config.get("TESTING") and current_app.config["APP_ENV"] != "production":
             # Development only: show the email in the terminal so the link can be copied. It is printed,
             # not logged, so links never end up in the log file.
@@ -23,15 +28,46 @@ def send_email(to: str, subject: str, html: str, text: str) -> bool:
                   "---------------------------------------\n", file=sys.stderr, flush=True)
         return False
     try:
-        resend.api_key = api_key
-        result = resend.Emails.send({"from": current_app.config["EMAIL_FROM"], "to": [to], "subject": subject,
-                                     "html": html, "text": text})
-        email_id = result.get("id") if isinstance(result, dict) else result
-        log.info("Email sent via Resend: '%s' (id %s)", subject, email_id)
-        return True
+        if provider == "brevo":
+            return _send_brevo(api_key, to, subject, html, text)
+        return _send_resend(api_key, to, subject, html, text)
     except Exception as exc:  # never let an email problem break the request or reveal details
-        log.error("Resend failed to send '%s': %s", subject, exc)
+        log.error("%s failed to send '%s': %s", provider.capitalize(), subject, exc)
         return False
+
+
+def _send_resend(api_key: str, to: str, subject: str, html: str, text: str) -> bool:
+    resend.api_key = api_key
+    result = resend.Emails.send({"from": current_app.config["EMAIL_FROM"], "to": [to], "subject": subject,
+                                 "html": html, "text": text})
+    email_id = result.get("id") if isinstance(result, dict) else result
+    log.info("Email sent via Resend: '%s' (id %s)", subject, email_id)
+    return True
+
+
+def _send_brevo(api_key: str, to: str, subject: str, html: str, text: str) -> bool:
+    """Brevo's transactional email API. EMAIL_FROM like "Ledgerly <no-reply@example.com>"."""
+    name, address = parseaddr(current_app.config["EMAIL_FROM"])
+    if not address:
+        log.error("Brevo: EMAIL_FROM is not a valid address: %s", current_app.config["EMAIL_FROM"])
+        return False
+    response = requests.post(
+        BREVO_URL,
+        headers={"api-key": api_key, "accept": "application/json", "content-type": "application/json"},
+        json={"sender": {"name": name or "Ledgerly", "email": address}, "to": [{"email": to}],
+              "subject": subject, "htmlContent": html, "textContent": text},
+        timeout=10,
+    )
+    if response.status_code in (200, 201, 202):
+        message_id = (response.json() or {}).get("messageId") if response.content else None
+        log.info("Email sent via Brevo: '%s' (id %s)", subject, message_id)
+        return True
+    try:
+        reason = response.json().get("message", response.text)
+    except ValueError:
+        reason = response.text
+    log.error("Brevo refused '%s' (%s): %s", subject, response.status_code, reason[:300])
+    return False
 
 
 def _layout(heading: str, intro: str, button: str, link: str, footer: str) -> str:
